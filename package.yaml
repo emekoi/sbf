@@ -1,0 +1,67 @@
+name: sbf
+version: 0.1.0.0
+github: emekoi/sbf
+license: MIT
+author: Emeka Nkurumeh
+maintainer: emekankurumeh@outlook.com
+copyright: MIT
+
+extra-source-files:
+  - README.md
+  - ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis: An optimizing BF compiler
+category: Compiler
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description: Please see the README on GitHub at <https://github.com/emekoi/sbf#readme>
+
+default-extensions:
+  - OverloadedStrings
+  - LambdaCase
+
+dependencies:
+  - base >= 4.7 && < 5
+  - llvm-hs-pretty >= 0.9.0.0
+  - llvm-hs-pure >= 9.0.0
+  - optparse-applicative >= 0.15.1.0
+  - vector
+  - bytestring
+  - prettyprinter
+  - pretty-simple
+  - data-default
+
+library:
+  source-dirs: src
+
+executables:
+  sbf:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+      - '-threaded'
+      - '-rtsopts'
+      - '-with-rtsopts=-N'
+      - '-pgml clang'
+    ld-options: '-fuse-ld=lld'
+    dependencies:
+      - sbf
+
+tests:
+  sbf-test:
+    main: TestAll.hs
+    source-dirs: test
+    ghc-options:
+      - '-threaded'
+      - '-rtsopts'
+      - '-with-rtsopts=-N'
+      - '-pgml clang'
+    ld-options: '-fuse-ld=lld'
+    dependencies:
+      - tasty
+      - tasty-golden
+      - tasty-hunit
+      - sbf
