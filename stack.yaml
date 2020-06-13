@@ -69,4 +69,4 @@ extra-deps:
 
 ghc-options:
   "$locals": -Wall -fno-warn-name-shadowing -Wcompat -Wincomplete-uni-patterns
-  "$everything": -fllvm -split-sections -fPIC -flate-specialise -fspecialise-aggressively #-O2 
+  "$everything": -fllvm -split-sections -flate-specialise -fspecialise-aggressively #-O2 

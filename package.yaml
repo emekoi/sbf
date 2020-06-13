@@ -33,9 +33,14 @@ dependencies:
   - prettyprinter
   - pretty-simple
   - data-default
+  - hashtables
 
 library:
   source-dirs: src
+  ghc-options:
+    - '-pgml clang'
+    - '-optc-pipe'
+  ld-options: '-fuse-ld=lld'
 
 executables:
   sbf:
@@ -46,6 +51,7 @@ executables:
       - '-rtsopts'
       - '-with-rtsopts=-N'
       - '-pgml clang'
+      - '-optc-pipe'
     ld-options: '-fuse-ld=lld'
     dependencies:
       - sbf
@@ -59,6 +65,7 @@ tests:
       - '-rtsopts'
       - '-with-rtsopts=-N'
       - '-pgml clang'
+      - '-optc-pipe'
     ld-options: '-fuse-ld=lld'
     dependencies:
       - tasty

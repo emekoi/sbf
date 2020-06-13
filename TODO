@@ -4,3 +4,5 @@
 - [ ] LLVM compiler
 
 - [ ] optimization passes
+  - [ ] RLE
+  - [ ] zero loops
