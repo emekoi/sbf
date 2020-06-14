@@ -5,23 +5,24 @@ where
 
 import qualified Data.List as L
 import qualified Data.Vector as V
-import qualified Data.Vector.Mutable as M
-import SBF.Compiler (Pass (..))
-import SBF.Parser (Op (..))
+import SBF.Compiler.Pass (Pass (..))
+import SBF.Parser (Op (..), OpProgram (..), computeJmpTable)
 
-newtype RLE = RLE ()
+data RLE = RLE
 
 instance Pass RLE where
-  apply _ o = V.modify (\v -> mapM_ (update v) jzl) $ V.fromList lo
+  apply _ (OpProgram _ p) = do
+    let p' = V.fromList . map mconcat . L.groupBy gf . V.toList $ p
+    jt <- computeJmpTable p'
+    return
+      OpProgram
+        { jmpTable = jt,
+          program = p'
+        }
     where
-      update v (s, e) = do
-        M.write v s (Jz . fromIntegral $ s)
-        M.write v e (Jnz . fromIntegral $ s)
-      lo = map mconcat . L.groupBy gf $ V.toList o
-      jzl = zip (L.elemIndices (Jz (-1)) lo) (reverse $ L.elemIndices (Jnz (-1)) lo)
-      gf a b = case a of
-        In -> False
-        Out -> False
-        Jz _ -> False
-        Jnz _ -> False
-        _ -> a == b
+      gf' o = any ($ o) [(== In), (== Out), (== Jz), (== Jnz)]
+      gf a b = case (gf' a, gf' b) of
+        (True, True) -> False
+        (True, False) -> False
+        (False, True) -> False
+        (_, _) -> a == b

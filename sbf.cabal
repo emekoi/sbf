@@ -29,6 +29,7 @@ library
   exposed-modules:
       Data.SegmentedList
       SBF.Compiler
+      SBF.Compiler.Pass
       SBF.Compiler.Pass.ClearZero
       SBF.Compiler.Pass.RLE
       SBF.Interpreter

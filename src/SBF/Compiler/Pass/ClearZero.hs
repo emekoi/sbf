@@ -5,19 +5,17 @@ where
 
 import qualified Data.List as L
 import qualified Data.Vector as V
--- import qualified Data.Vector.Mutable as M
-
 import GHC.Stack (HasCallStack)
-import SBF.Compiler (Pass (..))
-import SBF.Parser (Op (..))
+import SBF.Compiler.Pass (Pass (..))
+import SBF.Parser (Op (..), OpProgram (..), computeJmpTable)
 
-newtype ClearZero = ClearZero ()
+data ClearZero = ClearZero
 
 zeroMinus :: [Op]
-zeroMinus = [Jz (-1), Dec (-1), Jnz (-1)]
+zeroMinus = [Jz, Dec (-1), Jnz]
 
 zeroPlus :: [Op]
-zeroPlus = [Jz (-1), Inc (-1), Jnz (-1)]
+zeroPlus = [Jz, Inc (-1), Jnz]
 
 -- goes `from` -> `to` in x
 replace :: (HasCallStack, Eq a) => [a] -> [a] -> [a] -> [a]
@@ -27,4 +25,11 @@ replace from to (x : xs) = x : replace from to xs
 replace _ _ [] = []
 
 instance Pass ClearZero where
-  apply _ = V.fromList . replace zeroMinus [Clz] . replace zeroPlus [Clz] . V.toList
+  apply _ (OpProgram _ p) = do
+    let p' = V.fromList . replace zeroMinus [Clz] . replace zeroPlus [Clz] . V.toList $ p
+    jt <- computeJmpTable p'
+    return
+      OpProgram
+        { program = p',
+          jmpTable = jt
+        }

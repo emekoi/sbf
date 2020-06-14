@@ -1,19 +1,24 @@
-{-# LANGUAGE DeriveAnyClass #-}
-
 module SBF.Parser
-  ( Op (..),
+  ( OpProgram (..),
+    JumpTable,
+    Op (..),
     Int64,
     Word8,
     parse,
+    computeJmpTable,
   )
 where
 
-import qualified Data.ByteString.Lazy.Char8 as L
-import Data.Int (Int64)
 -- import Data.Monoid (Monoid (..))
+
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.HashTable.IO as H
+import Data.Int (Int64)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Word (Word8)
+import GHC.Stack (HasCallStack)
 
 data Op
   = Inc Int64
@@ -22,8 +27,9 @@ data Op
   | DDp Int64
   | Out
   | In
-  | Jz Int64
-  | Jnz Int64
+  | Jz
+  | Jnz
+  | Clz
   | Nop
   deriving (Show)
 
@@ -32,14 +38,13 @@ instance Eq Op where
   (Dec _) == (Dec _) = True
   (IDp _) == (IDp _) = True
   (DDp _) == (DDp _) = True
-  (Jz _) == (Jz _) = True
-  (Jnz _) == (Jnz _) = True
+  Jnz == Jnz = True
+  Jz == Jz = True
   Out == Out = True
   In == In = True
   Nop == Nop = True
   _ == _ = False
 
--- our instance of Semigroup is partial but that's okay
 instance Semigroup Op where
   Nop <> a = a
   a <> Nop = a
@@ -47,34 +52,69 @@ instance Semigroup Op where
   (Dec a) <> (Dec b) = Dec (a + b)
   (IDp a) <> (IDp b) = IDp (a + b)
   (DDp a) <> (DDp b) = DDp (a + b)
-
--- (Jz a) <> (Jz b) = Jz (a + b)
--- (Jnz a) <> (Jnz b) = Jnz (a + b)
--- Out <> Out = Out
--- In <> In = In
+  a <> b = error $ "invalid invocation: " ++ show a ++ " <> " ++ show b
 
 instance Monoid Op where
   mempty = Nop
 
-parse :: L.ByteString -> Vector Op
-parse i = V.unfoldr (parse' i) (0, [])
+type JumpTable = H.CuckooHashTable Int64 Int64
 
-safeHead :: [Int64] -> Int64
-safeHead [] = -1
-safeHead (x : _) = x
-{-# INLINE safeHead #-}
+data OpProgram
+  = OpProgram
+      { jmpTable :: JumpTable,
+        program :: Vector Op
+      }
+  deriving (Show)
 
-parse' :: L.ByteString -> (Int64, [Int64]) -> Maybe (Op, (Int64, [Int64]))
-parse' l (i, t) =
-  if i > L.length l
-    then Nothing
-    else Just $ case L.index l i of
-      '+' -> (Inc 1, (i + 1, t))
-      '-' -> (Dec 1, (i + 1, t))
-      '>' -> (IDp 1, (i + 1, t))
-      '<' -> (DDp 1, (i + 1, t))
-      '.' -> (Out, (i + 1, t))
-      ',' -> (In, (i + 1, t))
-      '[' -> (Jz i, (i + 1, i : t))
-      ']' -> (Jnz (safeHead t), (i + 1, tail t))
-      _ -> (Nop, (i, t))
+parse :: (HasCallStack, MonadIO m) => B.ByteString -> m OpProgram
+parse i = liftIO $ do
+  jt <- H.newSized 0
+  v <- V.unfoldrM (parse' (B.filter (`B.elem` "[-><+,.]") i) jt) (0, [])
+  return $
+    OpProgram
+      { jmpTable = jt,
+        program = v
+      }
+
+safeSplit :: HasCallStack => [Int64] -> (Int64, [Int64])
+safeSplit [] = error "unmatched '[' and ']'"
+safeSplit (x : xs) = (x, xs)
+{-# INLINE safeSplit #-}
+
+parse' :: (HasCallStack, MonadIO m) => B.ByteString -> JumpTable -> (Int64, [Int64]) -> m (Maybe (Op, (Int64, [Int64])))
+parse' s jt (i, js) =
+  if i >= B.length s
+    then return Nothing
+    else case B.index s i of
+      '-' -> rJust (Dec 1, (i + 1, js))
+      '+' -> rJust (Inc 1, (i + 1, js))
+      '>' -> rJust (IDp 1, (i + 1, js))
+      '<' -> rJust (DDp 1, (i + 1, js))
+      '.' -> rJust (Out, (i + 1, js))
+      ',' -> rJust (In, (i + 1, js))
+      '[' -> rJust (Jz, (i + 1, i : js))
+      ']' -> liftIO $ do
+        let (t, t') = safeSplit js
+        H.insert jt i t
+        H.insert jt t i
+        return . Just $ (Jnz, (i + 1, t'))
+      _ -> rJust (Nop, (i + 1, js))
+  where
+    rJust = return . Just
+{-# INLINE parse' #-}
+
+computeJmpTable :: MonadIO m => Vector Op -> m JumpTable
+computeJmpTable v = liftIO $ do
+  jt <- H.newSized 0
+  V.foldM_ comp (0, [], jt) v
+  return jt
+  where
+    comp (i, js, jt) o = do
+      case o of
+        Jz -> return (i + 1, i : js, jt)
+        Jnz -> do
+          let (t, r) = safeSplit js
+          H.insert jt i t
+          H.insert jt t i
+          return (i + 1, r, jt)
+        _ -> return (i + 1, js, jt)

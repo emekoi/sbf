@@ -2,14 +2,15 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Data.SegmentedList
-  ( List (..),
+  ( SList (..),
     empty,
     null,
     modify,
     modify',
+    modifyGrow,
     grow,
     (!),
-    (!?),
+    (!#),
   )
 where
 
@@ -19,50 +20,51 @@ import Data.Int (Int64)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as M
+import GHC.Stack (HasCallStack)
 import Prelude hiding (length, null)
 import qualified Prelude as P
 
 newtype VList a = VList [Vector a]
 
-data List a
-  = List
+data SList a
+  = SList
       { length :: Int64,
         capacity :: Int64,
         _shelf :: VList a
       }
   deriving (Show)
 
-shelf :: List a -> [Vector a]
-shelf (List _ _ (VList a)) = a
+shelf :: SList a -> [Vector a]
+shelf (SList _ _ (VList a)) = a
 
 instance Show a => Show (VList a) where
   show (VList a) = show . V.toList . V.concat $ a
 
-instance Functor List where
+instance Functor SList where
   fmap f l = l {_shelf = VList $ (map . V.map) f (shelf l)}
 
-empty :: List a
+empty :: SList a
 empty =
-  List
+  SList
     { length = 0,
       capacity = 0,
       _shelf = VList []
     }
 
-null :: List a -> Bool
+null :: SList a -> Bool
 null l = length l == 0
 
-(!) :: Default a => List a -> Int64 -> a
+(!) :: (HasCallStack, Default a) => SList a -> Int64 -> a
 l ! i = (shelf l !! fromIntegral si) V.! bi
   where
     si = shelfIndex i
     bi = fromIntegral $ boxIndex i si
 
-(!?) :: Default a => List a -> Int64 -> a
-l !? i = grow l i ! i
-{-# INLINE (!?) #-}
+(!#) :: (HasCallStack, Default a) => SList a -> Int64 -> a
+l !# i = grow l (i + 1) ! i
+{-# INLINE (!#) #-}
 
-modify :: Default a => List a -> Int64 -> (a -> a) -> List a
+modify :: (HasCallStack, Default a) => SList a -> Int64 -> (a -> a) -> SList a
 modify l i f =
   let (ys, zs) = splitAt (fromIntegral si) (shelf l)
       (dv, zs') = splitAt 1 zs
@@ -73,14 +75,18 @@ modify l i f =
     nv v = V.modify (\v -> M.modify v f bi) v
 {-# INLINE modify #-}
 
-modify' :: Default a => List a -> Int64 -> (a -> a) -> List a
+modify' :: (HasCallStack, Default a) => SList a -> Int64 -> (a -> a) -> SList a
 modify' l i f =
   if i >= capacity l
     then error "index out of bounds"
     else modify l i f
 {-# INLINE modify' #-}
 
-grow :: Default a => List a -> Int64 -> List a
+modifyGrow :: (HasCallStack, Default a) => SList a -> Int64 -> (a -> a) -> SList a
+modifyGrow l i = modify (grow l (i + 1)) i
+{-# INLINE modifyGrow #-}
+
+grow :: (HasCallStack, Default a) => SList a -> Int64 -> SList a
 grow l sz
   | sc' > sc =
     let f i a =
