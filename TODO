@@ -6,3 +6,5 @@
 - [ ] optimization passes
   - [x] RLE
   - [x] zero loops
+
+- [ ] interpreter optimizations

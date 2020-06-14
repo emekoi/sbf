@@ -61,7 +61,6 @@ step it Jz = liftIO $ do
   case tape it !# dp it of
     0 -> do
       Just ip' <- H.lookup (jmpTable $ code it) (ip it)
-      -- need to fix this V
       return it {ip = ip'}
     _ -> return it
 step it Jnz = liftIO $ do
@@ -69,7 +68,6 @@ step it Jnz = liftIO $ do
     0 -> return it
     _ -> do
       Just ip' <- H.lookup (jmpTable $ code it) (ip it)
-      -- need to fix this V
       return it {ip = ip'}
 step it Clz = return . mtape it $ const 0
 step it Nop = return it
